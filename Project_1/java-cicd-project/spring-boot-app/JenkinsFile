@@ -1,0 +1,110 @@
+pipeline {
+    agent any
+
+    stages {
+    stage('Checkout Code') {
+        steps {
+            echo 'scm git'
+            git branch: 'main', url: 'https://github.com/adarsh0331/Project_1.git'
+        }
+    }
+    
+    
+    stage('Compile and Test') {
+      steps {
+        sh 'ls -ltr'
+        // build the project and create a JAR file
+        sh 'cd java-cicd-project/spring-boot-app && mvn compile && mvn test'
+      }
+    }
+
+
+    stage('sonar') {
+    steps {
+        echo 'scanning project'
+        sh 'ls -ltr'
+        sh '''cd java-cicd-project/spring-boot-app && mvn sonar:sonar \\
+              -Dsonar.host.url=http://localhost:9000 \\
+              -Dsonar.login=squ_d519f9f045bdd07c9fb4866a7614f18155c09308'''
+    }
+}
+
+
+
+
+stage('Dependency Check') {
+    steps {
+        sh '''
+          /opt/dependency-check/bin/dependency-check.sh \
+          --project "SpringBootApp" \
+          --scan java-cicd-project/spring-boot-app \
+          --format HTML \
+          --data $WORKSPACE/odc-data \
+          --out dependency-check-report
+        '''
+    }
+}
+
+
+    stage('Publish Report') {
+        steps {
+            publishHTML([
+                allowMissing: false,
+                alwaysLinkToLastBuild: true,
+                keepAll: true,
+                reportDir: 'dependency-check-report',
+                reportFiles: 'dependency-check-report.html',
+                reportName: 'OWASP Dependency-Check Report'
+            ])
+        }
+    }
+
+
+    stage('Building the code') {
+      steps {
+        sh 'ls -ltr'
+        // build the project and create a JAR file
+        sh 'cd java-cicd-project/spring-boot-app && mvn clean package'
+      }
+    }
+
+    stage('Build docker image'){
+    steps{
+        script{
+            echo 'docker image build'
+  sh 'cd java-cicd-project/spring-boot-app && docker build -t adarshbarkunta/java:${BUILD_NUMBER} .'
+        }
+    }
+}
+		
+     stage('docker image scan'){
+     steps{
+         sh "trivy image adarshbarkunta/java:${BUILD_NUMBER}"
+     }
+ }		
+
+
+stage('Push image to Hub'){
+    steps{
+        script{
+            withCredentials([string(credentialsId: 'dockerhub', variable: 'dockerhub')]) {
+            sh 'docker login -u adarshbarkunta -p ${dockerhub}'
+
+      }
+            sh 'docker push adarshbarkunta/java:${BUILD_NUMBER}'
+        }
+    }
+}
+
+
+stage('Deploying image to docker container'){
+    steps{
+        script{
+       
+            sh 'docker run -itd --name java-app -p 8000:8080 adarshbarkunta/java:${BUILD_NUMBER}'
+        }
+    }
+}
+
+  }
+}

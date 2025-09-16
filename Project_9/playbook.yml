@@ -1,0 +1,34 @@
+# deploy_docker.yml
+---
+- name: Deploy Docker Container
+  hosts: localhost # Define your target hosts in your inventory
+  become: yes # Run tasks with elevated privileges
+
+  tasks:
+    # - name: Install Docker
+    #   ansible.builtin.apt:
+    #     name: docker.io
+    #     state: present
+    #     update_cache: yes
+
+    # - name: Start Docker service
+    #   ansible.builtin.systemd:
+    #     name: docker
+    #     state: started
+    #     enabled: yes
+
+    - name: Build Docker image
+      community.docker.docker_image:
+        name: my_app_image
+        build:
+          path: . # Path to the directory containing your Dockerfile
+        state: present
+        source: build
+
+    - name: Run Docker container
+      community.docker.docker_container:
+        name: my_app_container
+        image: my_app_image:latest
+        state: started
+        ports:
+          - "80:80" # Map host port 80 to container port 80

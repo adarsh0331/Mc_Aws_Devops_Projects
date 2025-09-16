@@ -1,0 +1,42 @@
+---
+- name: Install and Deploy WAR to Tomcat on Ubuntu
+  hosts: localhost
+  become: true
+  vars:
+   tomcat_service: tomcat10
+   tomcat_webapps: /var/lib/tomcat10/webapps
+
+  tasks:
+    #- name: Update apt cache
+    #  apt:
+     #   update_cache: yes
+
+    - name: Install Java (required for Tomcat)
+      apt:
+        name: openjdk-11-jdk
+        state: present
+
+    - name: Install Tomcat
+      apt:
+        name: "{{ tomcat_service }}"
+        state: present
+
+    - name: Ensure Tomcat service is running
+      service:
+        name: "{{ tomcat_service }}"
+        state: started
+        enabled: yes
+
+    - name: Copy WAR file to Tomcat webapps
+      copy:
+        src: "{{ artifact }}"
+        dest: "{{ tomcat_webapps }}/mindcircuitbatch15d-3.2.0.war"
+        remote_src: yes
+        owner: tomcat
+        group: tomcat
+        mode: '0644'
+
+    - name: Restart Tomcat
+      service:
+        name: "{{ tomcat_service }}"
+        state: restarted

@@ -1,1 +1,1 @@
-# Mc_Aws_Devops_Projects
+# AWS_DEVOPS_PROJECTS
