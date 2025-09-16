@@ -1,37 +1,6 @@
-<img width="940" height="365" alt="image" src="https://github.com/user-attachments/assets/2d0e60c2-1347-483b-a1ec-bd371a2bdd16" />
 # CI/CD Pipeline Architecture on AWS
+<img width="940" height="365" alt="image" src="https://github.com/user-attachments/assets/2d0e60c2-1347-483b-a1ec-bd371a2bdd16" />
 
-## Architecture Diagram
-
-Below is the architecture diagram represented in Mermaid syntax. You can copy-paste this into a Markdown renderer (e.g., GitHub README.md) or tools like Mermaid Live to visualize it with icons. I've used simple shapes and labels for clarity, but in a visual tool, you can add icons for GitHub, Jenkins, Docker, Ansible, and AWS EC2 (e.g., via font-awesome or custom images).
-
-```mermaid
-flowchart LR
-    A[Developer] -->|Pushes Code| B(GitHub Repository)
-    B -->|Webhook/Polling Trigger| C[Jenkins on EC2]
-    subgraph AWS EC2 Instance [AWS EC2 (t3.micro) - Default VPC/Security Groups]
-        C -->|Clone Repo| D[Trigger Ansible Playbook]
-        D -->|Automate Deployment| E[Build Docker Image]
-        E -->|Run Container| F[Deployed Application Container]
-    end
-    C[Jenkins on EC2] --> D
-    D[Ansible on EC2] --> E
-    E[Docker on EC2] --> F[Docker Container on EC2]
-
-    style A fill:#f9f,stroke:#333,stroke-width:2px
-    style B fill:#6cc644,stroke:#333,stroke-width:2px  // GitHub green
-    style C fill:#0099ff,stroke:#333,stroke-width:2px  // Jenkins blue
-    style D fill:#ee0701,stroke:#333,stroke-width:2px  // Ansible red
-    style E fill:#0db7ed,stroke:#333,stroke-width:2px  // Docker blue
-    style F fill:#0db7ed,stroke:#333,stroke-width:2px
-    style AWS EC2 Instance fill:#ff9900,stroke:#333,stroke-width:2px  // AWS orange
-```
-
-**Diagram Explanation:**
-- **Flow**: Starts from the Developer pushing code to GitHub, triggering Jenkins on the EC2 instance. Jenkins orchestrates the pipeline: cloning the repo, triggering Ansible for automation, building the Docker image, and running the container—all within the same EC2 instance.
-- **Icons/Logos**: In a visual renderer, replace placeholders with actual icons (e.g., fa:fa-github for GitHub, fa:fa-docker for Docker).
-- **Labels**: Each arrow is labeled with the function (e.g., "Pushes Code", "Clone Repo").
-- **Grouping**: All operations (Jenkins, Ansible, Docker) are grouped within the single AWS EC2 instance to indicate they run on the same host.
 
 ## Brief Documentation Summary
 
@@ -49,10 +18,6 @@ flowchart LR
 
 **Assumptions**: Default AWS settings; all tools on one EC2; no advanced security or scaling.
 
-# Detailed Documentation for README.md
-
-Below is a complete, detailed Markdown content suitable for a `README.md` file. It includes the architecture diagram (embedded as Mermaid), setup instructions, configuration details, troubleshooting, and more. This can be directly copied into your project's README.md.
-
 ```markdown
 # CI/CD Pipeline for Java Application on AWS
 
@@ -60,7 +25,6 @@ This repository documents a simple CI/CD pipeline for a Java application, deploy
 
 ## Table of Contents
 - [Overview](#overview)
-- [Architecture Diagram](#architecture-diagram)
 - [Prerequisites](#prerequisites)
 - [Infrastructure Setup](#infrastructure-setup)
 - [Tools and Components](#tools-and-components)
@@ -81,30 +45,6 @@ This pipeline automates the build and deployment of a Java application:
 - **Automation**: Ansible for configuration management and deployment tasks.
 - **Containerization**: Docker to package and run the application.
 - **Hosting**: AWS EC2 instance (t3.micro) as the single host for all tools and the running container.
-
-The workflow is triggered by a code push to GitHub, leading to automated build and deployment on the EC2 instance.
-
-## Architecture Diagram
-```mermaid
-flowchart LR
-    A[Developer] -->|Pushes Code| B(GitHub Repository)
-    B -->|Webhook/Polling Trigger| C[Jenkins on EC2]
-    subgraph AWS EC2 Instance [AWS EC2 (t3.micro) - Default VPC/Security Groups]
-        C -->|Clone Repo| D[Trigger Ansible Playbook]
-        D -->|Automate Deployment| E[Build Docker Image]
-        E -->|Run Container| F[Deployed Application Container]
-    end
-    C[Jenkins on EC2] --> D
-    D[Ansible on EC2] --> E
-    E[Docker on EC2] --> F[Docker Container on EC2]
-
-    style A fill:#f9f,stroke:#333,stroke-width:2px
-    style B fill:#6cc644,stroke:#333,stroke-width:2px  // GitHub green
-    style C fill:#0099ff,stroke:#333,stroke-width:2px  // Jenkins blue
-    style D fill:#ee0701,stroke:#333,stroke-width:2px  // Ansible red
-    style E fill:#0db7ed,stroke:#333,stroke-width:2px  // Docker blue
-    style F fill:#0db7ed,stroke:#333,stroke-width:2px
-    style AWS EC2 Instance fill:#ff9900,stroke:#333,stroke-width:2px  // AWS orange
 ```
 
 - **Key Elements**:
