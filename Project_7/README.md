@@ -1,5 +1,3 @@
-Below is a detailed `README.md` file for the DevOps architecture of a CI/CD pipeline deployed on AWS using Terraform-provisioned EC2 instances and a manually created Kubernetes cluster. The documentation includes a comprehensive description of the infrastructure, CI/CD workflow, monitoring, tools, and deployment flow, as requested. The architecture diagram is included as a Mermaid diagram, which can be rendered in tools like GitHub or Mermaid Live for visualization. The content is structured for clarity and includes practical details for setup, usage, and maintenance.
-
 ---
 
 # DevOps CI/CD Pipeline on AWS with Terraform and Kubernetes
