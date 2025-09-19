@@ -4,39 +4,6 @@
 
 This project implements a CI/CD pipeline for a Node.js application, deployed on AWS infrastructure using Terraform-provisioned EC2 instances and a manually created Kubernetes cluster. The pipeline automates code scanning, building, containerization, and deployment, with monitoring via Prometheus and Grafana. ArgoCD enables GitOps-based deployments to Kubernetes. This `README.md` provides a comprehensive guide to the architecture, workflow, tools, and setup instructions.
 
-## Architecture Diagram
-
-The following Mermaid diagram illustrates the CI/CD pipeline, deployment, and monitoring flows. Render it in a compatible tool (e.g., GitHub, Mermaid Live) to visualize tool icons and connections. Arrows indicate data flow between components.
-
-```mermaid
-graph TD
-    subgraph AWS
-        subgraph EC2 Instances
-            EC2_1[EC2 Instance 1 (t2.large): Jenkins, Docker, SonarQube, Trivy, NPM]
-            EC2_2[EC2 Instance 2 (t2.xlarge): Prometheus, Grafana (via Helm)]
-        end
-        ECR[AWS ECR (Docker Image Registry)]
-        K8s[Kubernetes Cluster (Manual CLI Creation): ArgoCD Installed]
-    end
-    GitHub[GitHub Repository]
-
-    %% CI/CD Flow
-    GitHub -->|1. Code Commit Triggers| Jenkins[Jenkins on EC2_1]
-    Jenkins -->|2. Clone Code| GitHub
-    Jenkins -->|3. Code Scan| SonarQube[SonarQube on EC2_1]
-    SonarQube -->|Pass| NPM[NPM on EC2_1: Build Node.js App]
-    NPM -->|Built Artifacts| Docker[Docker on EC2_1: Build Image]
-    Docker -->|4. Security Scan| Trivy[Trivy on EC2_1: Scan Image]
-    Trivy -->|Pass| ECR|5. Push Image|
-    ECR -->|Image Pushed| GitHub|6. Update deployment.yaml|
-    GitHub -->|GitOps Sync| ArgoCD[ArgoCD in K8s: Auto-Sync & Deploy]
-    ArgoCD -->|7. Deploy App| K8s
-
-    %% Monitoring Flow
-    K8s -->|Scrape Metrics| Prometheus[Prometheus on EC2_2]
-    Prometheus -->|Visualize| Grafana[Grafana on EC2_2]
-```
-
 ## Infrastructure
 
 The infrastructure is hosted on AWS, with EC2 instances provisioned via Terraform and a Kubernetes cluster created manually. Below is a detailed breakdown of components:
@@ -64,12 +31,23 @@ The infrastructure is hosted on AWS, with EC2 instances provisioned via Terrafor
 - **Terraform Configuration**:
   - Instance type: `t2.xlarge` (4 vCPUs, 16 GB RAM) for better performance with monitoring workloads.
   - AMI: Same as EC2 Instance 1.
-  - Security groups: Allow inbound traffic on ports 9090 (Prometheus), 3000 (Grafana), and 22 (SSH).
+  - Security groups: Allow inbound traffic on ports 9090 (Prometheus), 80 (Grafana), and 22 (SSH).
   - User data script: Installs Helm, then deploys Prometheus and Grafana via Helm charts.
 - **Helm Charts**:
-  - Prometheus: `helm install prometheus prometheus-community/prometheus --set server.service.type=NodePort`.
-  - Grafana: `helm install grafana grafana/grafana --set service.type=NodePort`.
 
+ **Helm Installation:**
+``` 
+curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 
+sudo chmod 700 get_helm.sh 
+sudo ./get_helm.sh 
+helm version --client
+```
+Add Helm Repositories 
+```
+helm repo add stable https://charts.helm.sh/stable 
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts 
+helm search repo prometheus-community
+```
 ### Kubernetes Cluster
 - **Setup**: Manually created using AWS CLI (e.g., via `eksctl create cluster` or EKS API).
 - **Configuration**:
@@ -79,51 +57,36 @@ The infrastructure is hosted on AWS, with EC2 instances provisioned via Terrafor
   - Configured to pull images from AWS ECR using an IAM role for the Kubernetes nodes.
 - **Networking**: Security groups allow Kubernetes API access and communication with Prometheus for metrics scraping.
 
+ **Install and Configure Prometheus and Grafana:**
+
+```kubectl create namespace prometheus ```
+
+```helm install stable prometheus-community/kube-prometheus-stack -n prometheus ```
+
+```kubectl get pods -n prometheus ```
+```kubectl get svc -n prometheus ```
+
+```kubectl patch svc stable-kube-prometheus-sta-prometheus -n prometheus -p '{"spec": {"type": "LoadBalancer"}}' ```
+```kubectl patch svc stable-grafana -n prometheus -p '{"spec": {"type": "LoadBalancer"}}' ```
+
+```kubectl get secret --namespace prometheus stable-grafana -o jsonpath="{.data.admin-password}" | base64 --decode ; echo``` 
+
+```kubectl get svc -n prometheus ```
+
+
 ### AWS ECR
 - **Purpose**: Private Docker registry for storing application images.
-- **Setup**: Created via Terraform or AWS CLI (`aws ecr create-repository --repository-name myapp`).
-- **IAM**: EC2 Instance 1 has permissions to push images; Kubernetes nodes have pull permissions.
+- **Setup**: Created via Terraform or AWS CLI (`aws ecr create-repository --repository-name nodejs`).
 
 ### GitHub Repository
 - **Purpose**: Stores source code, Dockerfiles, and Kubernetes manifests (`deployment.yaml`, `service.yaml`).
-- **Webhook**: Configured to trigger Jenkins on code commits to the main branch.
 - **Access**: Jenkins authenticates via SSH or GitHub API token.
 
 ### Terraform Setup
-- **Modules**: Separate modules for VPC, EC2 instances, security groups, and IAM roles.
-- **Directory Structure**:
   ```
   terraform/
   ├── main.tf
-  ├── variables.tf
-  ├── outputs.tf
-  ├── modules/
-  │   ├── vpc/
-  │   ├── ec2/
-  │   ├── iam/
-  ```
-- **Example `main.tf`** (simplified):
-  ```hcl
-  module "vpc" {
-    source  = "./modules/vpc"
-    cidr_block = "10.0.0.0/16"
-  }
 
-  module "ec2_instance_1" {
-    source        = "./modules/ec2"
-    instance_type = "t2.large"
-    ami           = "ami-12345678"
-    security_groups = [module.vpc.jenkins_sg]
-    user_data     = file("scripts/install_ci_tools.sh")
-  }
-
-  module "ec2_instance_2" {
-    source        = "./modules/ec2"
-    instance_type = "t2.xlarge"
-    ami           = "ami-12345678"
-    security_groups = [module.vpc.monitoring_sg]
-    user_data     = file("scripts/install_monitoring_tools.sh")
-  }
   ```
 - **Apply**: Run `terraform init`, `terraform plan`, and `terraform apply` to provision resources.
 
@@ -132,26 +95,24 @@ The infrastructure is hosted on AWS, with EC2 instances provisioned via Terrafor
 The CI/CD pipeline automates building, testing, and deploying a Node.js application using Jenkins as the orchestrator. The pipeline is defined in a `Jenkinsfile` (declarative pipeline) in the GitHub repository.
 
 ### Pipeline Stages
-1. **Trigger on Commit**:
-   - A GitHub webhook triggers Jenkins on new commits to the `main` branch.
-   - Webhook URL: `http://<jenkins-ip>:8080/github-webhook/`.
-2. **Clone Code**:
+
+1. **Clone Code**:
    - Jenkins clones the repository using Git credentials.
-3. **Code Quality Scan**:
+2. **Code Quality Scan**:
    - SonarQube scans the code for bugs, vulnerabilities, and code smells.
    - Configured via `sonar-project.properties` in the repo.
    - Fails if quality gates (e.g., coverage < 80%) are not met.
-4. **Build Application**:
+3. **Build Application**:
    - NPM installs dependencies (`npm install`) and builds the app (`npm run build`).
    - Artifacts are stored temporarily for Docker.
-5. **Security Scan (Optional)**:
+4. **Security Scan (Optional)**:
    - Trivy scans the Docker image for vulnerabilities (`trivy image myapp:latest`).
    - Configured to fail on critical or high-severity vulnerabilities.
-6. **Build and Push Docker Image**:
+5. **Build and Push Docker Image**:
    - Docker builds the image (`docker build -t myapp:$BUILD_NUMBER .`).
    - Tags and pushes to ECR (`docker push <aws-account-id>.dkr.ecr.<region>.amazonaws.com/myapp:$BUILD_NUMBER`).
    - Requires AWS CLI and ECR login (`aws ecr get-login-password`).
-7. **Update Manifest**:
+6. **Update Manifest**:
    - A script updates `deployment.yaml` in GitHub to reference the new image tag.
    - Example script:
      ```bash
@@ -159,59 +120,109 @@ The CI/CD pipeline automates building, testing, and deploying a Node.js applicat
      git commit -m "Update image tag to $BUILD_NUMBER"
      git push origin main
      ```
-8. **ArgoCD Sync**:
+7. **ArgoCD Sync**:
    - ArgoCD detects the manifest change and syncs the Kubernetes deployment.
 
 ### Jenkinsfile Example
 ```groovy
 pipeline {
     agent any
+
     stages {
-        stage('Clone') {
-            steps {
-                git 'https://github.com/<user>/<repo>.git'
-            }
+    stage('Checkout Code') {
+        steps {
+            echo 'scm git'
+            git branch: 'main', url: 'https://github.com/adarsh0331/Project_7.git'
         }
-        stage('SonarQube Scan') {
-            steps {
-                withSonarQubeEnv('SonarQube') {
-                    sh 'sonar-scanner'
+    }
+    
+
+    stage('SonarQube Analysis') {
+        steps {
+            withSonarQubeEnv('SonarQube') {   // Jenkins -> Manage Jenkins -> Configure System -> SonarQube servers
+                 script {
+                   def scannerHome = tool 'SonarScannerCLI'   // Jenkins -> Manage Jenkins -> Tools -> SonarQube Scanner installations
+                      sh """
+                          ${scannerHome}/bin/sonar-scanner \
+                          -Dsonar.projectKey=my-devops-app \
+                          -Dsonar.sources=. \
+                          -Dsonar.host.url=http://54.167.98.78:9000/ \
+                          -Dsonar.login=squ_1d768aa35185eaddb20ecdfbe32f0740c673b5f6
+                       """
+                    }
                 }
             }
         }
-        stage('Build App') {
-            steps {
-                sh 'npm install && npm run build'
-            }
+
+    stage('Building the code') {
+      steps {
+        sh 'ls -ltr'
+        // build the project and create a JAR file
+        sh 'npm install'
+      }
+    }
+
+    stage('Build docker image'){
+    steps{
+        script{
+            echo 'docker image build'
+        sh 'sudo docker build -t adarshbarkunta/nodejs:${BUILD_NUMBER} .'
         }
-        stage('Security Scan') {
-            steps {
-                sh 'trivy image --exit-code 1 --severity CRITICAL,HIGH myapp:latest'
-            }
-        }
-        stage('Build & Push Docker') {
-            steps {
+    }
+}
+		
+     stage('docker image scan'){
+     steps{
+         sh "sudo trivy image adarshbarkunta/nodejs:${BUILD_NUMBER}"
+     }
+ }		
+
+
+stage('Push image to ECR') {
+    steps {
+        withAWS(credentials: 'aws-creds', region: 'us-east-1') {
+            script {
                 sh '''
-                    aws ecr get-login-password | docker login --username AWS --password-stdin <aws-account-id>.dkr.ecr.<region>.amazonaws.com
-                    docker build -t myapp:$BUILD_NUMBER .
-                    docker tag myapp:$BUILD_NUMBER <aws-account-id>.dkr.ecr.<region>.amazonaws.com/myapp:$BUILD_NUMBER
-                    docker push <aws-account-id>.dkr.ecr.<region>.amazonaws.com/myapp:$BUILD_NUMBER
-                '''
-            }
-        }
-        stage('Update Manifest') {
-            steps {
-                sh '''
-                    git config user.email "jenkins@ci.com"
-                    git config user.name "Jenkins"
-                    sed -i "s|image: .*|image: <aws-account-id>.dkr.ecr.<region>.amazonaws.com/myapp:$BUILD_NUMBER|" deployment.yaml
-                    git add deployment.yaml
-                    git commit -m "Update image tag to $BUILD_NUMBER"
-                    git push origin main
+                  aws ecr get-login-password --region us-east-1 \
+                  | sudo docker login --username AWS --password-stdin 526344317172.dkr.ecr.us-east-1.amazonaws.com
+                  
+                  sudo docker tag adarshbarkunta/nodejs:${BUILD_NUMBER} 526344317172.dkr.ecr.us-east-1.amazonaws.com/nodejs:${BUILD_NUMBER}
+                  sudo docker push 526344317172.dkr.ecr.us-east-1.amazonaws.com/nodejs:${BUILD_NUMBER}
                 '''
             }
         }
     }
+}
+       stage('Update Deployment File') {
+		
+		 environment {
+            GIT_REPO_NAME = "Project_7"
+            GIT_USER_NAME = "adarsh0331"
+        }
+		
+            steps {
+                echo 'Update Deployment File'
+				withCredentials([string(credentialsId: 'githubtoken', variable: 'githubtoken')]) 
+				{
+                  sh '''
+                    git config user.email "adarsh@gmail.com"
+                    git config user.name "adarsh"
+                    BUILD_NUMBER=${BUILD_NUMBER}
+                   #sed -i "s/mc:.*/mc:${BUILD_NUMBER}/g" deploymentfiles/deployment.yml
+					sed -i "s|image: .*|image: 526344317172.dkr.ecr.us-east-1.amazonaws.com/nodejs:$BUILD_NUMBER|" deploymentfiles/deployment.yml
+                    git add .
+                    
+                    git commit -m "Update deployment image to version ${BUILD_NUMBER}"
+
+                    git push https://${githubtoken}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME} HEAD:main
+                '''
+				  
+                 }
+				
+            }
+        }
+
+  }
 }
 ```
 
@@ -273,33 +284,35 @@ The deployment process is GitOps-driven using ArgoCD:
 2. **Manifest Update**: Jenkins updates `deployment.yaml` in GitHub with the new image tag.
    - Example `deployment.yaml`:
      ```yaml
-     apiVersion: apps/v1
-     kind: Deployment
-     metadata:
-       name: myapp
-       namespace: default
-     spec:
-       replicas: 3
-       selector:
-         matchLabels:
-           app: myapp
-       template:
-         metadata:
-           labels:
-             app: myapp
-         spec:
-           containers:
-           - name: myapp
-             image: <aws-account-id>.dkr.ecr.<region>.amazonaws.com/myapp:<tag>
-             ports:
-             - containerPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mc-app
+  labels:
+    app: mc-app
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      app: mc-app
+  template:
+    metadata:
+      labels:
+        app: mc-app
+    spec:
+      containers:
+      - name: mc-app
+        image: 526344317172.dkr.ecr.us-east-1.amazonaws.com/nodejs:16
+        ports:
+        - containerPort: 3000
      ```
 3. **ArgoCD Sync**:
    - ArgoCD monitors the GitHub repo for changes.
    - Detects the updated `deployment.yaml` and triggers a sync.
    - Applies the manifest to Kubernetes using `kubectl apply`.
 4. **Kubernetes Deployment**:
-   - Kubernetes pulls the image from ECR (authenticated via IAM).
+   - Kubernetes pulls the image from ECR 
    - Rolls out new pods with a rolling update strategy for zero downtime.
 5. **Monitoring**:
    - Prometheus scrapes metrics from the new pods.
@@ -354,10 +367,4 @@ The deployment process is GitOps-driven using ArgoCD:
 - **ArgoCD Sync Issues**: Check ArgoCD UI for sync errors or GitHub connectivity.
 - **Monitoring Gaps**: Ensure Prometheus scrape targets are correct and pods expose metrics.
 
-## Contact
-
-For issues or improvements, contact the DevOps team at `<your-email>` or raise a GitHub issue in the project repository.
-
 ---
-
-This `README.md` provides a complete guide for setting up, running, and maintaining the CI/CD pipeline. It includes practical details like Terraform snippets, Jenkinsfile, and Kubernetes manifests, ensuring developers and DevOps engineers can replicate or extend the setup. Let me know if you need additional sections, specific configurations, or further clarification!
