@@ -1,3 +1,5 @@
+<img width="2874" height="1379" alt="image" src="https://github.com/user-attachments/assets/cd6754d9-f1b6-41d2-ba19-2adbe96706d8" />
+
 ---
 
 # DevOps CI/CD Pipeline on AWS with Terraform and Kubernetes
